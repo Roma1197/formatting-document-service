@@ -59,11 +59,13 @@ Sub FormattingDoc()
     Set TargetDoc = Documents.Open(FileName:=TargetDocPath, Visible:=False)
     
     FormattingFunction CurrentDoc, TargetDoc
-
-
+    
     ' Saving changes and closing target document
     TargetDoc.Close SaveChanges:=wdSaveChanges
-     
+    
+    ' Display a window that target document formattion is complete
+    MsgBox "The document formatting process is complete.", vbInformation, "Done!"
+    
 End Sub
 
 
@@ -297,9 +299,6 @@ Sub FormattingFunction(SampleDoc, TargetDoc)
     ' Enable screen update
     Application.ScreenUpdating = True
     
-    ' Display a window that target document formattion is complete
-    MsgBox "The document formatting process is complete.", vbInformation, "Done!"
-
 End Sub
 
 
