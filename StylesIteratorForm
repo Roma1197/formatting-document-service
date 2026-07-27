@@ -1,0 +1,47 @@
+Private IsBusy As Boolean
+
+Private Sub UserForm_Initialize()
+    Dim i As Long
+    Dim Height As Integer
+    
+    For i = 1 To StyleCount
+        lstStyles.AddItem StyleList(i)
+    Next i
+    lstStyles.Height = StyleCount * 18 + 4
+    Height = lstStyles.Top + lstStyles.Height
+    frmStyles.Height = Height + 80
+    cmdNext.Top = Height + 10
+    cmdPrev.Top = Height + 10
+    cmdClose.Top = Height + 10
+End Sub
+
+Private Sub lstStyles_Click()
+    CurrentStyleIndex = lstStyles.ListIndex + 1
+    TargetStyle = StyleList(CurrentStyleIndex)
+    CurrentParagIndex = 0
+End Sub
+
+Private Sub cmdNext_Click()
+    HandleNavigate 1, IndexValue
+End Sub
+
+Private Sub cmdPrev_Click()
+    HandleNavigate -1, 0
+End Sub
+
+Private Sub HandleNavigate(Direction, EndIndex)
+    If IsBusy Then Exit Sub
+    IsBusy = True
+    cmdNext.Enabled = False
+    cmdPrev.Enabled = False
+    Me.Repaint
+    NavigateToParagraph Direction, EndIndex
+    DoEvents
+    cmdNext.Enabled = True
+    cmdPrev.Enabled = True
+    IsBusy = False
+End Sub
+
+Private Sub cmdClose_Click()
+    Unload Me
+End Sub
