@@ -1,0 +1,148 @@
+Public Parags As Paragraphs
+Public ParagsCount As Long
+Public Ps As PageSetup
+Public RightPos As Single
+Public CenterPos As Single
+Public StyleList() As String
+Public StyleCount As Long
+Public FirstIndexStylesList() As Long
+Public LastIndexStylesList() As Long
+Public CurrentStyleIndex As Long
+Public CurrentParagIndex As Long
+Public TargetStyle As String
+Public Direction As Integer
+Public StartIndex As Long
+Public IndexValue As Long
+Public EndIndex As Long
+Public Index As Long
+Public Result As VbMsgBoxResult
+Public RngBefore As Range
+Public RngAfter As Range
+Public Eq As OMath
+Public ts As TabStop
+Public HasCenterTabStop As Boolean
+Public HasRightTabStop As Boolean
+Public CountSymbolsBefore As Integer
+Public CountSymbolsInFormula As Integer
+Public CountSymbolsWithFormula As Integer
+Public txt As String
+Public Tab1 As Long
+Public HasTab As Boolean
+
+Sub CollectUsedStyles()
+    Dim p As Paragraph
+    Dim StyleName As String
+    Dim i As Long
+    Dim i_1 As Long
+    Dim found As Boolean
+    
+    ReDim FirstIndexStylesList(1 To ParagsCount)
+    ReDim LastIndexStylesList(1 To ParagsCount)
+    ReDim StyleList(1 To ParagsCount)
+    Counter = 0
+    StyleCount = 0
+    For Each p In Parags
+        StyleName = p.Style
+        found = False
+        Counter = Counter + 1
+        For i = 1 To StyleCount
+            If StyleList(i) = StyleName Then
+                found = True
+                Exit For
+            End If
+        Next i
+        If Not found Then
+            StyleCount = StyleCount + 1
+            StyleList(StyleCount) = StyleName
+            FirstIndexStylesList(StyleCount) = Counter
+            For i_1 = Parags.Count To Counter Step -1
+                If Parags(i_1).Style = StyleName Then
+                    LastIndexStylesList(StyleCount) = i_1
+                    Exit For
+                End If
+            Next i_1
+        End If
+    Next p
+    If StyleCount > 0 Then
+        ReDim Preserve FirstIndexStylesList(1 To StyleCount)
+        ReDim Preserve LastIndexStylesList(1 To StyleCount)
+        ReDim Preserve StyleList(1 To StyleCount)
+    End If
+End Sub
+
+Sub OpenStyleNavigator()
+    Set Parags = ActiveDocument.Paragraphs
+    Set Ps = ActiveDocument.PageSetup
+    ParagsCount = Parags.Count
+    IndexValue = ParagsCount + 1
+    CollectUsedStyles
+    If StyleCount = 0 Then
+        MsgBox "Styles no find.", vbExclamation
+        Exit Sub
+    End If
+    RightPos = Ps.PageWidth - Ps.LeftMargin - Ps.RightMargin
+    CenterPos = Round(RightPos / 2, 1)
+    frmStyles.Show vbModeless
+End Sub
+
+Sub NavigateToParagraph(Direction, EndIndex)
+    StartIndex = CurrentParagIndex + Direction
+    ParagsIteratorNext StartIndex, EndIndex, Direction
+End Sub
+
+Sub ParagsIteratorNext(StartIndex, EndIndex, Direction)
+    For Index = StartIndex To EndIndex Step Direction
+        If Index = IndexValue Then
+            Result = MsgBox("To the beginning?", vbOKCancel Or vbExclamation)
+            If Result = vbCancel Then Exit Sub
+            Index = FirstIndexStylesList(CurrentStyleIndex)
+        ElseIf Index = 0 Then
+            Result = MsgBox("At the end?", vbOKCancel Or vbExclamation)
+            If Result = vbCancel Then Exit Sub
+            Index = LastIndexStylesList(CurrentStyleIndex)
+        End If
+        If Parags(Index).Style = TargetStyle Then
+            If TargetStyle = "Formula" Then
+                Set RngBefore = Parags(Index).Range.Duplicate
+                Set Eq = Parags(Index).Range.OMaths(1)
+                Set RngAfter = Parags(Index).Range.Duplicate
+                txt = Parags(Index).Range.Text
+                RngBefore.End = Eq.Range.Start
+                RngAfter.Start = Eq.Range.End
+                CountSymbolsBefore = Len(RngBefore.Text)
+                CountSymbolsInFormula = Len(Eq.Range.Text)
+                CountSymbolsWithFormula = CountSymbolsBefore + CountSymbolsInFormula
+                Debug.Print CountSymbolsBefore; "The number of symbols before formula"
+                Debug.Print CountSymbolsInFormula; "The number of symbols in formula"
+                Debug.Print Len(RngAfter.Text) - 1; "The number of symbols after formula"
+                If Eq.Range.ParagraphFormat.TabStops.Count > 0 Then
+                    For Each ts In Eq.Range.ParagraphFormat.TabStops
+                        If ts.CustomTab Then
+                            If ts.Alignment = wdAlignTabCenter And ts.Position = CenterPos Then HasCenterTabStop = True
+                            If ts.Alignment = wdAlignTabRight And ts.Position = RightPos Then HasRightTabStop = True
+                        End If
+                    Next ts
+                    Tab1 = InStr(txt, vbTab)
+                    Debug.Print CountSymbolsBefore
+                    Debug.Print CountSymbolsWithFormula
+                    Debug.Print Tab1
+                    Debug.Print InStr(Tab1 + 1, txt, vbTab)
+                    If CountSymbolsBefore >= Tab1 And CountSymbolsWithFormula < InStr(Tab1 + 1, txt, vbTab) Then HasTab = True
+                Else
+                    Debug.Print "There are no tabs"
+                End If
+                If HasCenterTabStop And HasRightTabStop And HasTab Then
+                    Debug.Print "Tabs in paragraph are right!"
+                Else
+                    Debug.Print "Tabs in paragraph are wrong!"
+                End If
+            End If
+            Parags(Index).Range.Select
+            Debug.Print Len(txt) - 1; "The total number of symbols in current paragraph"
+            ActiveDocument.ActiveWindow.ScrollIntoView Parags(Index).Range
+            CurrentParagIndex = Index
+            Exit Sub
+        End If
+    Next Index
+End Sub
+
