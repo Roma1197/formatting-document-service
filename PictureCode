@@ -1,0 +1,52 @@
+' Find the first figure in the sample document and assign its style parameters to a variable srcFigPara
+    For Each srcShp In SampleDoc.InlineShapes
+        If srcShp.Type = wdInlineShapePicture Or srcShp.Type = wdInlineShapeLinkedPicture Then
+            Set srcFigPara = srcShp.Range.Paragraphs(1)
+            Exit For
+        End If
+    Next srcShp
+    
+    ' Warning that no figures were found in the sample document
+    If srcFigPara Is Nothing Then
+        MsgBox "Pictures in the sample document isn`t found.", vbExclamation
+        Exit Sub
+    End If
+    
+    Set srcFmt = srcFigPara.Range.ParagraphFormat
+    StyleName = srcFigPara.Style.NameLocal
+    
+    ' Horizontal alignment of a paragraph, paragraph indentation on the left and right in points,
+    ' first line indentation in points, indentation before and after a paragraph in points,
+    ' line spacing rule, numeric spacing value in points, setting custom tab stops,
+    ' enabling the maintain aspect ratio option, matching the size of each figure
+    ' in the target document to the figure in the sample document
+    Count = 0
+    For Each shp In TargetDoc.InlineShapes
+        If shp.Type = wdInlineShapePicture Or shp.Type = wdInlineShapeLinkedPicture Then
+            With shp
+                With .Range.Paragraphs(1)
+                    With .Range.ParagraphFormat
+                        .Alignment = srcFmt.Alignment
+                        .LeftIndent = srcFmt.LeftIndent
+                        .RightIndent = srcFmt.RightIndent
+                        .FirstLineIndent = srcFmt.FirstLineIndent
+                        .SpaceBefore = srcFmt.SpaceBefore
+                        .SpaceAfter = srcFmt.SpaceAfter
+                        .LineSpacingRule = srcFmt.LineSpacingRule
+                        If srcFmt.LineSpacingRule = wdLineSpaceExactly Or srcFmt.LineSpacingRule = wdLineSpaceAtLeast Or srcFmt.LineSpacingRule = wdLineSpaceMultiple Then
+                            .LineSpacing = srcFmt.LineSpacing
+                        End If
+                        .TabStops.ClearAll
+                        For Each ts In srcFmt.TabStops
+                            If ts.CustomTab Then
+                                .TabStops.Add Position:=ts.Position, Alignment:=ts.Alignment, Leader:=ts.Leader
+                            End If
+                        Next ts
+                    End With
+                    shp.LockAspectRatio = msoTrue
+                    shp.Width = srcShp.Width
+                End With
+            End With
+            Count = Count + 1
+        End If
+    Next shp
