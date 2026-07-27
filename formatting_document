@@ -1,15 +1,39 @@
-Sub FormattingDoc()
+Sub FormattingCurrentDoc()
     
     Dim CurrentDoc As Document
+    Dim CurrentDocParags As Paragraphs
+    Dim CurrentDocParagsCount As Long
+    Dim CurrentDocFullName As String
     Dim CurrentFolder As String
     Dim FilePicker As FileDialog
     Dim SampleDocPath As String
+    Dim stl As Style
     Dim SampleDoc As Document
-    Dim TargetDocPath As String
-    Dim TargetDoc As Document
+    Dim SampleDocParags As Paragraphs
+    Dim SampleDocParagsCount As Long
+    Dim SampleDocStyles As Styles
+    Dim SampleDocFullName As String
+    Dim rngTarget As Range
+    Dim i As Long
+    Dim StyleName As String
+    Dim Parag As Paragraph
+    Dim FormulaParag As Paragraph
+    Dim TabCount As Long
+    Dim ts As TabStop
+    Dim TabData() As Variant
+    Dim TabDataCount As Long
+    Dim TabStopRight As Boolean
+    Dim FirstTabPos As Integer
+    Dim Eq As OMath
+    Dim TargetRange As Range
     
     ' Assign active sample document cast as Document to SampleDoc variable
     Set CurrentDoc = ActiveDocument
+    
+    Set CurrentDocStyles = CurrentDoc.Styles
+    Set CurrentDocParags = CurrentDoc.Paragraphs
+    CurrentDocParagsCount = CurrentDocParags.Count
+    CurrentDocFullName = CurrentDoc.FullName
     
     ' Getting active document folder path
     CurrentFolder = CurrentDoc.Path & "\"
@@ -32,10 +56,268 @@ Sub FormattingDoc()
         End If
     End With
     
+    ' Disable screen update during formatting document
+    Application.ScreenUpdating = False
+    
+    ' Enable 'Resume Next mode': if an error occurs, do not stop the program, but proceed to the next line
+    On Error Resume Next
+    
+    For Each stl In CurrentDocStyles
+        
+        ' Checking whether the style in current document is a built-in style
+        If stl.BuiltIn = True Then
+            
+            ' Making a built-in styles invisible in current document
+            stl.Visibility = True ' bug: https://bettersolutions.com/word/styles/vba-bug-visibility-property.htm
+            
+        Else
+            ' Deleting a custom styles in current document
+            stl.Delete
+        End If
+        
+    Next stl
+    
+    ' Disable 'Resume Next mode' and return to standard VBA error handling
+    On Error GoTo 0
+    
     ' Opening target document in the background
     Set SampleDoc = Documents.Open(FileName:=SampleDocPath, Visible:=False)
     
-    FormattingFunction SampleDoc, CurrentDoc
+    ' Getting all paragraphs, paragraphs count and full path of sample document
+    Set SampleDocParags = SampleDoc.Paragraphs
+    SampleDocParagsCount = SampleDocParags.Count
+    Set SampleDocStyles = SampleDoc.Styles
+    SampleDocFullName = SampleDoc.FullName
+    
+    ' Copy the content from sample document to the end of the current document
+    Set rngTarget = CurrentDoc.Content
+    rngTarget.Collapse Direction:=wdCollapseEnd
+    rngTarget.FormattedText = SampleDoc.Content.FormattedText
+    
+    ' Enable 'Resume Next mode': if an error occurs, do not stop the program, but proceed to the next line
+    On Error Resume Next
+    
+    ' Copying all styles from sample document to current document
+    For Each stl In SampleDocStyles
+        Application.OrganizerCopy _
+            Source:=SampleDocFullName, _
+            Destination:=CurrentDocFullName, _
+            Name:=stl.NameLocal, _
+            Object:=wdOrganizerObjectStyles
+    Next stl
+    
+    ' Disable 'Resume Next mode' and return to standard VBA error handling
+    On Error GoTo 0
+    
+    ' Coping margins, header size and footer size from sample document to current document
+    For i = 1 To SampleDoc.Sections.Count
+        If i <= CurrentDoc.Sections.Count Then
+            With CurrentDoc.Sections(i).PageSetup
+                .TopMargin = SampleDoc.Sections(i).PageSetup.TopMargin
+                .BottomMargin = SampleDoc.Sections(i).PageSetup.BottomMargin
+                .LeftMargin = SampleDoc.Sections(i).PageSetup.LeftMargin
+                .RightMargin = SampleDoc.Sections(i).PageSetup.RightMargin
+                .HeaderDistance = SampleDoc.Sections(i).PageSetup.HeaderDistance
+                .FooterDistance = SampleDoc.Sections(i).PageSetup.FooterDistance
+            End With
+        End If
+    Next i
+    
+    ' Assigning the StyleName variable the name of the style "Formula"
+    StyleName = "Formula"
+    
+    ' Search first formula paragraph in sample document
+    i = 0
+    For i = 1 To SampleDocParagsCount
+        Set Parag = SampleDocParags(i)
+        If Parag.Style = StyleName Then
+            Set FormulaParag = Parag
+            Exit For
+        End If
+    Next i
+    
+    ' Assign the list of all target document style names to the stl variable
+    Set stl = CurrentDoc.Styles(StyleName)
+    
+    ' Checking for the presence of a paragraph with a formula in sample document
+    If Not FormulaParag Is Nothing Then
+        
+        ' Coping tab stops parameters from the first paragraph with
+        ' a formula in sample document in TabData array
+        TabCount = 0
+        For Each ts In FormulaParag.Range.ParagraphFormat.TabStops
+            If ts.CustomTab Then
+                TabCount = TabCount + 1
+                
+                ' Resizes the TabData array, increasing its number of
+                ' columns to the number of tab stops found
+                ReDim Preserve TabData(1 To 3, 1 To TabCount)
+                
+                ' Adding 'Position' tab stop parameter
+                TabData(1, TabCount) = ts.Position
+                
+                ' Adding 'Alignment' tab stop parameter
+                TabData(2, TabCount) = ts.Alignment
+                
+                ' Adding 'Leader' tab stop parameter
+                TabData(3, TabCount) = ts.Leader
+            End If
+        Next ts
+        
+        ' Adding tab stops in 'Formula' style of target document
+        If TabCount >= 2 Then
+            With stl.ParagraphFormat.TabStops
+                
+                ' Delating all tab stops in 'Formula' style of target document
+                .ClearAll
+                
+                ' Adding first tab stop in 'Formula' style of target document
+                .Add Position:=TabData(1, 1), _
+                     Alignment:=TabData(2, 1), _
+                     Leader:=TabData(3, 1)
+                
+                ' Adding second tab stop in 'Formula' style of target document
+                .Add Position:=TabData(1, 2), _
+                     Alignment:=TabData(2, 2), _
+                     Leader:=TabData(3, 2)
+            End With
+        End If
+    
+    End If
+    
+    TabDataCount = UBound(TabData, 2)
+    
+    ' Iterating target document paragraphs
+    i = 0
+    For i = 1 To CurrentDocParagsCount
+        Set Parag = CurrentDocParags(i)
+        If Parag.Style = StyleName Then
+            
+            ' Iterating tab stops in 'Formula'-styled paragraphs of target document
+            TabCount = 0
+            TabStopRight = False
+            For Each ts In Parag.Range.ParagraphFormat.TabStops
+                If ts.CustomTab Then
+                    TabCount = TabCount + 1
+                    
+                    ' Checking whether the number of tab stops in 'Formula'-styled paragraph
+                    ' of target document exceeds the number of tab stops in the TabDataCount array
+                    If TabCount <= TabDataCount Then
+                        
+                        ' Checking the correctness of the positions and types of tab stops
+                        ' in 'Formula'-styled paragraph of target document
+                        If ts.Position = TabData(1, TabCount) And _
+                           ts.Alignment = TabData(2, TabCount) And _
+                           ts.Leader = TabData(3, TabCount) Then
+                            TabStopRight = True
+                        Else
+                            TabStopRight = False
+                        End If
+                    Else
+                        TabStopRight = False
+                    End If
+                End If
+            Next ts
+            
+            ' Checking if tab stops positions and types in a paragraph are correct
+            If TabStopRight = False Then
+                
+                ' If tab stops positions and types are incorrect than delating all
+                ' tab stops in 'Formula'-styled paragraph of target document
+                Parag.Range.ParagraphFormat.TabStops.ClearAll
+                
+                ' Adding tab in 'Formula'-styled paragraph of target document if that is neccessary
+                TabCount = 0
+                For TabCount = 1 To TabDataCount
+                    Parag.Range.ParagraphFormat.TabStops.Add _
+                    Position:=TabData(1, TabCount), _
+                    Alignment:=TabData(2, TabCount), _
+                    Leader:=TabData(3, TabCount)
+                Next TabCount
+            End If
+             
+            ' Delating all tabs in 'Formula'-styled paragraph of target document
+            With Parag.Range.Duplicate.Find
+                .ClearFormatting
+                .Replacement.ClearFormatting
+                .Text = "^t"
+                .Replacement.Text = ""
+                .Forward = True
+                .Wrap = wdFindStop
+                .Format = False
+                .Execute Replace:=wdReplaceAll
+            End With
+            
+            ' Adding tab in 'Formula'-styled paragraph of target document if that is neccessary
+            FirstTabPos = InStr(Parag.Range.Text, vbTab)
+            If FirstTabPos = 0 Then
+                
+                ' Adding tab in paragraph with OMaths object
+                If Parag.Range.OMaths.Count > 0 Then
+                    Set Eq = Parag.Range.OMaths(1)
+                    Set TargetRange = Eq.Range.Duplicate
+                    TargetRange.Collapse wdCollapseStart
+                    TargetRange.Select
+                    Selection.MoveLeft Unit:=wdCharacter, Count:=1
+                    Selection.TypeText vbTab
+                    
+                ' Adding tab in paragraph with text formula
+                Else
+                    Parag.Range.InsertBefore vbTab
+                End If
+            End If
+        End If
+    Next i
+    
+    ' Save and close source sample document
+    SampleDoc.Close SaveChanges:=False
+    
+    ' Enable screen update
+    Application.ScreenUpdating = True
+    
+    ' Display a window that target document formattion is complete
+    MsgBox "The text has been copied successfully!", vbInformation, "Done"
+      
+End Sub
+Sub FormattingTargetDoc()
+    
+    Dim CurrentDoc As Document
+    Dim CurrentDocStyles As Styles
+    Dim CurrentDocParags As Paragraphs
+    Dim CurrentDocParagsCount As Long
+    Dim CurrentDocFullName As String
+    Dim CurrentFolder As String
+    Dim FilePicker As FileDialog
+    Dim TargetDocPath As String
+    Dim TargetDoc As Document
+    Dim TargetDocParags As Paragraphs
+    Dim TargetDocParagsCount As Long
+    Dim TargetDocStyles As Styles
+    Dim TargetDocFullName As String
+    Dim stl As Style
+    Dim i As Long
+    Dim StyleName As String
+    Dim Parag As Paragraph
+    Dim FormulaParag As Paragraph
+    Dim ts As TabStop
+    Dim TabCount As Long
+    Dim TabData() As Variant
+    Dim TabDataCount As Long
+    Dim TabStopRight As Boolean
+    Dim FirstTabPos As Integer
+    Dim Eq As OMath
+    Dim TargetRange As Range
+    
+    ' Assign active sample document cast as Document to SampleDoc variable
+    Set CurrentDoc = ActiveDocument
+    
+    Set CurrentDocStyles = CurrentDoc.Styles
+    Set CurrentDocParags = CurrentDoc.Paragraphs
+    CurrentDocParagsCount = CurrentDocParags.Count
+    CurrentDocFullName = CurrentDoc.FullName
+    
+    ' Getting active document folder path
+    CurrentFolder = CurrentDoc.Path & "\"
     
     ' Creating and saving a file selection dialog in the FilePicker variable
     Set FilePicker = Application.FileDialog(msoFileDialogFilePicker)
@@ -58,92 +340,37 @@ Sub FormattingDoc()
     ' Opening target document in the background
     Set TargetDoc = Documents.Open(FileName:=TargetDocPath, Visible:=False)
     
-    FormattingFunction CurrentDoc, TargetDoc
-    
-    ' Saving changes and closing target document
-    TargetDoc.Close SaveChanges:=wdSaveChanges
-    
-    ' Display a window that target document formattion is complete
-    MsgBox "The document formatting process is complete.", vbInformation, "Done!"
-    
-End Sub
-
-
-Sub FormattingFunction(SampleDoc, TargetDoc)
-
-    Dim SampleDocParags As Paragraphs
-    Dim SampleDocParagsCount As Long
-    Dim SampleDocFullName As String
-    Dim TargetDocFullName As String
-    Dim TargetDocStyles As Styles
-    Dim stl As Style
-    Dim SampleDocStyles As Styles
-    Dim i As Long
-    Dim StyleName As String
-    Dim FormulaParag As Paragraph
-    Dim Parag As Paragraph
-    Dim TabCount As Long
-    Dim ts As TabStop
-    Dim TabData() As Variant
-    Dim TargetDocParags As Paragraphs
-    Dim TargetDocParagsCount As Long
-    Dim TabDataCount As Long
-    Dim TabStopRight As Boolean
-    Dim FirstTabPos As Integer
-    Dim Eq As OMath
-    Dim TargetRange As Range
-    
     ' Getting all paragraphs, paragraphs count and full path of sample document
-    Set SampleDocParags = SampleDoc.Paragraphs
-    SampleDocParagsCount = SampleDocParags.Count
-    SampleDocFullName = SampleDoc.FullName
-    
-    ' Getting full path of target document
-    TargetDocFullName = TargetDoc.FullName
-
-    ' Disable screen update during formatting document
-    Application.ScreenUpdating = False
-    
-    ' Deleting styles in target document
+    Set TargetDocParags = TargetDoc.Paragraphs
+    TargetDocParagsCount = TargetDocParags.Count
     Set TargetDocStyles = TargetDoc.Styles
+    TargetDocFullName = TargetDoc.FullName
     
     ' Enable 'Resume Next mode': if an error occurs, do not stop the program, but proceed to the next line
     On Error Resume Next
-    For Each stl In TargetDocStyles
-        
-        ' Checking whether the style in target document is a built-in Word style
-        If stl.BuiltIn = True Then
-            
-            ' Making a style visible in the target document style list
-            stl.Visibility = True ' bug: https://bettersolutions.com/word/styles/vba-bug-visibility-property.htm
-        End If
+    
+    ' Copying all styles from current document to target document
+    For Each stl In CurrentDocStyles
+        Application.OrganizerCopy _
+            Source:=CurrentDocFullName, _
+            Destination:=TargetDocFullName, _
+            Name:=stl.NameLocal, _
+            Object:=wdOrganizerObjectStyles
     Next stl
     
     ' Disable 'Resume Next mode' and return to standard VBA error handling
     On Error GoTo 0
     
-    ' Copying all styles from sample document to target document
-    Set SampleDocStyles = SampleDoc.Styles
-    For Each stl In SampleDocStyles
-        If stl.InUse = True Then
-            Application.OrganizerCopy _
-                Source:=SampleDocFullName, _
-                Destination:=TargetDocFullName, _
-                Name:=stl.NameLocal, _
-                Object:=wdOrganizerObjectStyles
-        End If
-    Next stl
-    
     ' Coping margins, header size and footer size from sample document to target document
-    For i = 1 To SampleDoc.Sections.Count
+    For i = 1 To CurrentDoc.Sections.Count
         If i <= TargetDoc.Sections.Count Then
             With TargetDoc.Sections(i).PageSetup
-                .TopMargin = SampleDoc.Sections(i).PageSetup.TopMargin
-                .BottomMargin = SampleDoc.Sections(i).PageSetup.BottomMargin
-                .LeftMargin = SampleDoc.Sections(i).PageSetup.LeftMargin
-                .RightMargin = SampleDoc.Sections(i).PageSetup.RightMargin
-                .HeaderDistance = SampleDoc.Sections(i).PageSetup.HeaderDistance
-                .FooterDistance = SampleDoc.Sections(i).PageSetup.FooterDistance
+                .TopMargin = CurrentDoc.Sections(i).PageSetup.TopMargin
+                .BottomMargin = CurrentDoc.Sections(i).PageSetup.BottomMargin
+                .LeftMargin = CurrentDoc.Sections(i).PageSetup.LeftMargin
+                .RightMargin = CurrentDoc.Sections(i).PageSetup.RightMargin
+                .HeaderDistance = CurrentDoc.Sections(i).PageSetup.HeaderDistance
+                .FooterDistance = CurrentDoc.Sections(i).PageSetup.FooterDistance
             End With
         End If
     Next i
@@ -151,10 +378,10 @@ Sub FormattingFunction(SampleDoc, TargetDoc)
     ' Assigning the StyleName variable the name of the style "Formula"
     StyleName = "Formula"
     
-    ' Search first formula paragraph in sample document
+    ' Search first formula paragraph in current document
     i = 0
-    For i = 1 To SampleDocParagsCount
-        Set Parag = SampleDocParags(i)
+    For i = 1 To CurrentDocParagsCount
+        Set Parag = CurrentDocParags(i)
         If Parag.Style = StyleName Then
             Set FormulaParag = Parag
             Exit For
@@ -210,8 +437,6 @@ Sub FormattingFunction(SampleDoc, TargetDoc)
     
     End If
     
-    Set TargetDocParags = TargetDoc.Paragraphs
-    TargetDocParagsCount = TargetDocParags.Count
     TabDataCount = UBound(TabData, 2)
     
     ' Iterating target document paragraphs
@@ -296,11 +521,13 @@ Sub FormattingFunction(SampleDoc, TargetDoc)
         End If
     Next i
     
-    ' Enable screen update
-    Application.ScreenUpdating = True
+    ' Saving changes and closing target document
+    TargetDoc.Close SaveChanges:=wdSaveChanges
+    
+    ' Display a window that target document formattion is complete
+    MsgBox "The document formatting process is complete!", vbInformation, "Done"
     
 End Sub
-
 
 
 
