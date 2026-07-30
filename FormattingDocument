@@ -294,9 +294,11 @@ Sub FormattingTargetDoc()
     Dim TargetDocParagsCount As Long
     Dim TargetDocStyles As Styles
     Dim TargetDocFullName As String
-    Dim stl As Style
+    Dim srcStyle As Style
+    Dim dstStyle As Style
     Dim i As Long
     Dim StyleName As String
+    Dim stl As Style
     Dim Parag As Paragraph
     Dim FormulaParag As Paragraph
     Dim ts As TabStop
@@ -349,15 +351,68 @@ Sub FormattingTargetDoc()
     ' Enable 'Resume Next mode': if an error occurs, do not stop the program, but proceed to the next line
     On Error Resume Next
     
-    ' Copying all styles from current document to target document
-    For Each stl In CurrentDocStyles
-        Application.OrganizerCopy _
-            Source:=CurrentDocFullName, _
-            Destination:=TargetDocFullName, _
-            Name:=stl.NameLocal, _
-            Object:=wdOrganizerObjectStyles
-    Next stl
-    
+    ' Copy styles from current document to target document
+    For Each srcStyle In CurrentDoc.Styles
+        
+        If srcStyle.QuickStyle Then
+            
+            Set dstStyle = TargetDoc.Styles(srcStyle.NameLocal)
+            
+            If dstStyle Is Nothing Then
+                Set dstStyle = TargetDoc.Styles.Add(Name:=srcStyle.NameLocal, Type:=srcStyle.Type)
+            End If
+            
+            ' Copies style fonts
+            With dstStyle.Font
+                .Name = srcStyle.Font.Name
+                .Size = srcStyle.Font.Size
+                .Bold = srcStyle.Font.Bold
+                .Italic = srcStyle.Font.Italic
+                .Underline = srcStyle.Font.Underline
+                .Color = srcStyle.Font.Color
+                .AllCaps = srcStyle.Font.AllCaps
+                .SmallCaps = srcStyle.Font.SmallCaps
+            End With
+            
+            ' Copies paragraph properties
+            With dstStyle.ParagraphFormat
+               .Alignment = srcStyle.ParagraphFormat.Alignment
+               .LeftIndent = srcStyle.ParagraphFormat.LeftIndent
+               .RightIndent = srcStyle.ParagraphFormat.RightIndent
+               .FirstLineIndent = srcStyle.ParagraphFormat.FirstLineIndent
+               .SpaceBefore = srcStyle.ParagraphFormat.SpaceBefore
+               .SpaceAfter = srcStyle.ParagraphFormat.SpaceAfter
+               .LineSpacingRule = srcStyle.ParagraphFormat.LineSpacingRule
+               .LineSpacing = srcStyle.ParagraphFormat.LineSpacing
+               .KeepTogether = srcStyle.ParagraphFormat.KeepTogether
+               .KeepWithNext = srcStyle.ParagraphFormat.KeepWithNext
+           End With
+           
+           ' Copies tabulation
+           dstStyle.ParagraphFormat.TabStops.ClearAll
+           
+           For Each ts In srcStyle.ParagraphFormat.TabStops
+               dstStyle.ParagraphFormat.TabStops.Add _
+                   Position:=ts.Position, _
+                   Alignment:=ts.Alignment, _
+                   Leader:=ts.Leader
+           Next
+           
+           ' Copies borders and fill
+           With dstStyle.Borders(wdBorderBottom)
+               .LineStyle = srcStyle.Borders(wdBorderBottom).LineStyle
+               .LineWidth = srcStyle.Borders(wdBorderBottom).LineWidth
+           End With
+           
+           ' Copies languages
+           dstStyle.LanguageID = srcStyle.LanguageID
+           
+           Set dstStyle.NextParagraphStyle = CurrentDoc.Styles(srcStyle.NextParagraphStyle.NameLocal)
+           
+        End If
+           
+    Next srcStyle
+        
     ' Disable 'Resume Next mode' and return to standard VBA error handling
     On Error GoTo 0
     
@@ -528,8 +583,3 @@ Sub FormattingTargetDoc()
     MsgBox "The document formatting process is complete!", vbInformation, "Done"
     
 End Sub
-
-
-
-
-
